@@ -1084,17 +1084,21 @@ function addSelectedSkill() {
   }
 
   // Secondary path gating
-  if (isSecondaryPathSkill) {
-    let allowedSecondaryTier = 0;
-    if (currentTier >= 6) {
-      allowedSecondaryTier = 3;
-    } else if (currentTier >= 4) {
-      allowedSecondaryTier = 2;
-    } else if (currentTier >= 2) {
-      allowedSecondaryTier = 1;
-    } else {
-      allowedSecondaryTier = 0;
-    }
+if (isSecondaryPathSkill) {
+  let allowedSecondaryTier = 0;
+  if (currentTier >= 10) {
+    allowedSecondaryTier = 5;
+  } else if (currentTier >= 8) {
+    allowedSecondaryTier = 4;
+  } else if (currentTier >= 6) {
+    allowedSecondaryTier = 3;
+  } else if (currentTier >= 4) {
+    allowedSecondaryTier = 2;
+  } else if (currentTier >= 2) {
+    allowedSecondaryTier = 1;
+  } else {
+    allowedSecondaryTier = 0;
+  }
 
     if (allowedSecondaryTier === 0) {
       alert("You cannot choose skills from other paths until you reach Tier 2.");
