@@ -1473,14 +1473,26 @@ function renderEvents() {
 
 // ---------- TOTALS & TIER ----------
 function computeTierFromEvents(qualifyingCount) {
-  let remaining = qualifyingCount;
-  let tier = 0;
-  let needed = 1;
+  // Correct progression:
+  // Tier 0 = 0–1 events
+  // Tier 1 = 2 events
+  // Tier 2 = 4 events
+  // Tier 3 = 7 events
+  // Tier 4 = 11 events
+  // etc...
 
-  while (remaining >= needed && tier < 10) {
-    tier++;
-    remaining -= needed;
-    needed++;
+  const count = Math.max(0, parseInt(qualifyingCount, 10) || 0);
+  let tier = 0;
+
+  for (let nextTier = 1; nextTier <= 10; nextTier++) {
+    const totalNeeded =
+      1 + (nextTier * (nextTier + 1)) / 2;
+
+    if (count >= totalNeeded) {
+      tier = nextTier;
+    } else {
+      break;
+    }
   }
 
   return Math.min(tier, 10);
@@ -1489,9 +1501,13 @@ function computeTierFromEvents(qualifyingCount) {
 function computeEventsToNextTier(qualifyingCount, currentTier) {
   if (currentTier >= 10) return 0;
 
+  const count = Math.max(0, parseInt(qualifyingCount, 10) || 0);
   const nextTier = currentTier + 1;
-  const totalNeededForNext = (nextTier * (nextTier + 1)) / 2;
-  const remaining = totalNeededForNext - qualifyingCount;
+
+  const totalNeeded =
+    1 + (nextTier * (nextTier + 1)) / 2;
+
+  const remaining = totalNeeded - count;
   return remaining > 0 ? remaining : 0;
 }
 
