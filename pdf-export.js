@@ -417,8 +417,8 @@ function exportCharacterPDF() {
 
   if (!fullSkillInfo) {
     // Table header background
-    doc.setFillColor(60, 40, 20);
-    doc.setDrawColor(60, 40, 20);
+    // doc.setFillColor(60, 40, 20);
+    // doc.setDrawColor(60, 40, 20);
     doc.rect(margin, y, tableWidth, headerHeight, "F");
 
     doc.setFont("Times", "bold");
