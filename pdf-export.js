@@ -38,12 +38,8 @@ function drawParchmentBackground(doc) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
 
-  if (parchmentImg) {
-    doc.addImage(parchmentImg, "JPEG", 0, 0, pageWidth, pageHeight);
-  } else {
-    doc.setFillColor(245, 233, 210);
-    doc.rect(0, 0, pageWidth, pageHeight, "F");
-  }
+  doc.setFillColor(255, 255, 255); // White
+  doc.rect(0, 0, pageWidth, pageHeight, "F");
 }
 
 // Helper: compute display string for uses
@@ -417,8 +413,8 @@ function exportCharacterPDF() {
 
   if (!fullSkillInfo) {
     // Table header background
-    // doc.setFillColor(60, 40, 20);
-    // doc.setDrawColor(60, 40, 20);
+    doc.setFillColor(60, 40, 20);
+    doc.setDrawColor(60, 40, 20);
     doc.rect(margin, y, tableWidth, headerHeight, "F");
 
     doc.setFont("Times", "bold");
