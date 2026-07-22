@@ -413,8 +413,8 @@ function exportCharacterPDF() {
 
   if (!fullSkillInfo) {
     // Table header background
-    doc.setFillColor(60, 40, 20);
-    doc.setDrawColor(60, 40, 20);
+    doc.setFillColor(0, 0, 0);
+    doc.setDrawColor(0, 0, 0);
     doc.rect(margin, y, tableWidth, headerHeight, "F");
 
     doc.setFont("Times", "bold");
@@ -526,8 +526,8 @@ function exportCharacterPDF() {
         doc.text("Skills (continued)", margin, y);
         y += 10;
 
-        doc.setFillColor(60, 40, 20);
-        doc.setDrawColor(60, 40, 20);
+        doc.setFillColor(0, 0, 0);
+        doc.setDrawColor(0, 0, 0);
         doc.rect(margin, y, tableWidth, headerHeight, "F");
 
         doc.setFont("Times", "bold");
@@ -733,8 +733,8 @@ function exportCharacterPDF() {
     const eventHeaderHeight = 30;
 
     // header bar
-    doc.setFillColor(60, 40, 20);
-    doc.setDrawColor(60, 40, 20);
+    doc.setFillColor(0, 0, 0);
+    doc.setDrawColor(0, 0, 0);
     doc.rect(margin, y, eventTableWidth, eventHeaderHeight, "F");
 
     doc.setFont("Times", "bold");
@@ -790,8 +790,8 @@ function exportCharacterPDF() {
           doc.text("Event Summary (continued)", margin, y);
           y += 10;
 
-          doc.setFillColor(60, 40, 20);
-          doc.setDrawColor(60, 40, 20);
+          doc.setFillColor(0, 0, 0);
+          doc.setDrawColor(0, 0, 0);
           doc.rect(margin, y, eventTableWidth, eventHeaderHeight, "F");
 
           doc.setFont("Times", "bold");
