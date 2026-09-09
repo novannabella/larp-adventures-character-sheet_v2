@@ -131,6 +131,10 @@ function normalizeSkillName(name) {
     .trim();
 }
 
+function getSkillTemplateName(record) {
+  return (record && (record.baseName || record.name)) || "";
+}
+
 // Recompute per-path tiers and update Secondary/Profession fields
 function updatePathAndProfessionDisplays() {
   const mainPath = pathDisplaySelect.value || "";
@@ -492,86 +496,365 @@ function handleSharpMindSelection(sharpMindRecord) {
   );
 }
 // ----- Prereq parsing -----
-// Supports prerequisites written like:
-//   Skill A
-//   Skill A AND Skill B AND Skill C
-//   Skill A OR Skill B
-//   Skill A AND Skill B OR Skill C   -> treated as (A AND B) OR C
-// Skill names may contain spaces, commas, punctuation.
-// NOTE: The words AND/OR must not appear as standalone words inside a skill name.
+// Supports exact skill names plus AND/OR expressions. AND/OR inside square
+// brackets are treated as part of the skill name, not as operators.
+// Oxford-comma prerequisite lists such as "A, B, and C" or "A, B, or C"
+// are also supported without breaking skill names that themselves contain commas.
 
-function splitByOperator(expr, opWord) {
-  const reOp = new RegExp(`\\b${opWord}\\b`, "i");
-  // Manual split to preserve skill names containing punctuation/commas
-  const parts = expr
-    .split(reOp)
-    .map((p) => (p || "").trim())
-    .filter(Boolean);
-  return parts;
+const ARTIFICER_EXPERTISES = new Set([
+  "gems",
+  "runes",
+  "weaponry",
+  "armor",
+  "alchemy",
+  "construct",
+  "clothing",
+  "wondrous items"
+]);
+
+function normalizeExpertiseName(value) {
+  let norm = normalizeSkillName(value)
+    .replace(/^\[|\]$/g, "")
+    .trim();
+  if (norm === "constructs") norm = "construct";
+  return norm;
+}
+
+function getBracketValues(name) {
+  const values = [];
+  const re = /\[([^\]]+)\]/g;
+  let match;
+  while ((match = re.exec(name || "")) !== null) {
+    match[1]
+      .split(/\s*,\s*|\s+or\s+/i)
+      .map((v) => normalizeExpertiseName(v))
+      .filter(Boolean)
+      .forEach((v) => values.push(v));
+  }
+  return values;
+}
+
+function getArtificerExpertisesForSkill(record) {
+  if (!record || record.path !== "Artificer") return [];
+
+  // For [Any] skills, the replacement text is an object/skill name, not an
+  // expertise category, so use the original template and do not count [Any].
+  const templateName = getSkillTemplateName(record);
+  if (/\[Any\]/i.test(templateName)) return [];
+
+  return Array.from(
+    new Set(
+      getBracketValues(templateName).filter((value) =>
+        ARTIFICER_EXPERTISES.has(value)
+      )
+    )
+  );
+}
+
+function getOwnedAttuneExpertises(skillList = selectedSkills) {
+  const result = new Set();
+  (skillList || []).forEach((record) => {
+    if (!record || record.path !== "Artificer") return;
+    const templateName = getSkillTemplateName(record);
+    if (!/^Attune\b/i.test(templateName)) return;
+    getArtificerExpertisesForSkill(record).forEach((e) => result.add(e));
+  });
+  return result;
+}
+
+function countArtificerSkillsWithExpertise(expertise, skillList = selectedSkills) {
+  const target = normalizeExpertiseName(expertise);
+  return (skillList || []).filter(
+    (record) =>
+      record &&
+      record.path === "Artificer" &&
+      getArtificerExpertisesForSkill(record).includes(target)
+  ).length;
+}
+
+function countTopLevelCommas(expr) {
+  let squareDepth = 0;
+  let parenDepth = 0;
+  let count = 0;
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i];
+    if (ch === "[") squareDepth++;
+    else if (ch === "]" && squareDepth > 0) squareDepth--;
+    else if (ch === "(") parenDepth++;
+    else if (ch === ")" && parenDepth > 0) parenDepth--;
+    else if (ch === "," && squareDepth === 0 && parenDepth === 0) count++;
+  }
+  return count;
+}
+
+function findFinalTopLevelConjunction(expr) {
+  let squareDepth = 0;
+  let parenDepth = 0;
+  let finalOp = null;
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i];
+    if (ch === "[") {
+      squareDepth++;
+      continue;
+    }
+    if (ch === "]" && squareDepth > 0) {
+      squareDepth--;
+      continue;
+    }
+    if (ch === "(") {
+      parenDepth++;
+      continue;
+    }
+    if (ch === ")" && parenDepth > 0) {
+      parenDepth--;
+      continue;
+    }
+    if (squareDepth || parenDepth) continue;
+
+    const rest = expr.slice(i);
+    const m = rest.match(/^\s*(and|or)\b/i);
+    if (m) {
+      finalOp = m[1].toUpperCase();
+      i += m[0].length - 1;
+    }
+  }
+  return finalOp;
+}
+
+function normalizeOxfordPrereqCommas(expr) {
+  const commaCount = countTopLevelCommas(expr);
+  if (commaCount < 2) return expr;
+
+  const conjunction = findFinalTopLevelConjunction(expr);
+  if (!conjunction) return expr;
+
+  // Only convert a comma list when the final conjunction is itself preceded
+  // by a comma (A, B, and C / A, B, or C). This preserves names such as
+  // "Repair Armor, non-metal AND ...".
+  const lower = expr.toLowerCase();
+  const marker = `, ${conjunction.toLowerCase()} `;
+  if (!lower.includes(marker)) return expr;
+
+  let squareDepth = 0;
+  let parenDepth = 0;
+  let out = "";
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i];
+    if (ch === "[") squareDepth++;
+    else if (ch === "]" && squareDepth > 0) squareDepth--;
+    else if (ch === "(") parenDepth++;
+    else if (ch === ")" && parenDepth > 0) parenDepth--;
+
+    if (ch === "," && squareDepth === 0 && parenDepth === 0) {
+      out += ` ${conjunction} `;
+    } else {
+      out += ch;
+    }
+  }
+
+  // "A OR B OR or C" can result after replacing the comma before the final
+  // conjunction. Collapse a duplicated conjunction cleanly.
+  return out.replace(
+    new RegExp(`\\b${conjunction}\\s+${conjunction}\\b`, "gi"),
+    conjunction
+  );
+}
+
+function splitByTopLevelOperator(expr, opWord) {
+  const parts = [];
+  let squareDepth = 0;
+  let parenDepth = 0;
+  let start = 0;
+  const target = opWord.toLowerCase();
+
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i];
+    if (ch === "[") {
+      squareDepth++;
+      continue;
+    }
+    if (ch === "]" && squareDepth > 0) {
+      squareDepth--;
+      continue;
+    }
+    if (ch === "(") {
+      parenDepth++;
+      continue;
+    }
+    if (ch === ")" && parenDepth > 0) {
+      parenDepth--;
+      continue;
+    }
+    if (squareDepth || parenDepth) continue;
+
+    const before = i === 0 ? " " : expr[i - 1];
+    const candidate = expr.slice(i, i + target.length);
+    const after = expr[i + target.length] || " ";
+    if (
+      candidate.toLowerCase() === target &&
+      !/[A-Za-z0-9_]/.test(before) &&
+      !/[A-Za-z0-9_]/.test(after)
+    ) {
+      parts.push(expr.slice(start, i).trim());
+      i += target.length - 1;
+      start = i + 1;
+    }
+  }
+
+  parts.push(expr.slice(start).trim());
+  return parts.filter(Boolean);
 }
 
 function parsePrereqExpression(prereqRaw) {
   if (!prereqRaw) return null;
-  const raw = String(prereqRaw).trim();
+  let raw = String(prereqRaw).trim();
   if (!raw) return null;
 
-  // Prefer explicit OR groupings first (OR of AND groups).
-  // Example: "A AND B OR C AND D" => [[A,B],[C,D]]
-  const orGroups = splitByOperator(raw, "OR");
+  raw = normalizeOxfordPrereqCommas(raw);
+
+  // OR of AND groups, with operators recognized only outside brackets/parens.
+  const orGroups = splitByTopLevelOperator(raw, "OR");
   if (orGroups.length > 1) {
-    const groups = orGroups.map((g) => splitByOperator(g, "AND"));
+    const groups = orGroups.map((g) => splitByTopLevelOperator(g, "AND"));
     return { type: "OR_OF_AND", groups };
   }
 
-  // No OR present -> AND list (or single)
-  const andList = splitByOperator(raw, "AND");
+  const andList = splitByTopLevelOperator(raw, "AND");
   return { type: "AND", skills: andList };
 }
 
-function checkPrerequisitesForSkill(skill) {
+function matchesAnyTemplate(record, reqName) {
+  const req = String(reqName || "").trim();
+  if (!/\[Any\]/i.test(req)) return false;
+
+  const template = getSkillTemplateName(record);
+  if (normalizeSkillName(template) === normalizeSkillName(req)) return true;
+
+  // Backward compatibility for saved characters created before baseName was
+  // stored: match the displayed replacement value in the [Any] position.
+  const escaped = req.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = escaped.replace(/\\\[Any\\\]/gi, "\\[[^\\]]+\\]");
+  return new RegExp(`^${pattern}$`, "i").test(record.name || "");
+}
+
+function checkPrerequisitesForSkill(skill, skillList = selectedSkills) {
   const prereqRaw = (skill && skill.prereq ? String(skill.prereq) : "").trim();
   if (!prereqRaw) return { ok: true };
+
+  // These Masterwork requirements are intentionally player/GM verified rather
+  // than tracked by the character sheet.
+  if (/^10\s+Artificer\s+Schematics\s+associated\s+with\s+\(Expertise\)\.?$/i.test(prereqRaw)) {
+    return { ok: true };
+  }
 
   const parsed = parsePrereqExpression(prereqRaw);
   if (!parsed) return { ok: true };
 
-  const owned = new Set((selectedSkills || []).map((sk) => normalizeSkillName(sk.name)));
+  function evaluateRequirement(reqName) {
+    const req = String(reqName || "").trim().replace(/[.;]+$/g, "").trim();
+    if (!req) return { ok: true };
 
-  // Helper to check one required skill name
-  function hasSkill(reqName) {
-    const norm = normalizeSkillName(reqName);
-    return owned.has(norm);
+    let m = req.match(/^(\d+)\s+(?:Artificer\s+)?skills?\s+with\s+\[([^\]]+)\]$/i);
+    if (m) {
+      const needed = parseInt(m[1], 10) || 0;
+      const expertise = normalizeExpertiseName(m[2]);
+      const have = countArtificerSkillsWithExpertise(expertise, skillList);
+      return {
+        ok: have >= needed,
+        label: `${needed} skills with [${m[2]}] (you have ${have})`
+      };
+    }
+
+    m = req.match(/^(\d+)\s+Artificer\s+Skills?\s+of\s+\(Expertise\)$/i);
+    if (m) {
+      const needed = parseInt(m[1], 10) || 0;
+      const ownedAttunes = Array.from(getOwnedAttuneExpertises(skillList));
+      const totals = ownedAttunes.map((expertise) => ({
+        expertise,
+        count: countArtificerSkillsWithExpertise(expertise, skillList)
+      }));
+      const ok = totals.some((item) => item.count >= needed);
+      const detail = totals.length
+        ? totals.map((item) => `${item.expertise}: ${item.count}`).join(", ")
+        : "no Attune expertises selected";
+      return {
+        ok,
+        label: `${needed} Artificer Skills matching one of your Attune expertises (${detail})`
+      };
+    }
+
+    // Generic (Expertise): candidate must have at least one category matching
+    // an Attune expertise already owned.
+    if (/^\(Expertise\)$/i.test(req)) {
+      const candidateExpertises = getArtificerExpertisesForSkill(skill);
+      const ownedAttunes = getOwnedAttuneExpertises(skillList);
+      const ok = candidateExpertises.some((e) => ownedAttunes.has(e));
+      return { ok, label: "a matching Attune expertise" };
+    }
+
+    // Family prerequisites used by the updated Artificer rules.
+    if (/^Masterwork$/i.test(req)) {
+      const ok = (skillList || []).some(
+        (record) =>
+          record &&
+          record.path === "Artificer" &&
+          /^Masterwork:/i.test(getSkillTemplateName(record))
+      );
+      return { ok, label: "one Masterwork skill" };
+    }
+
+    if (/^Permanency$/i.test(req)) {
+      const ok = (skillList || []).some(
+        (record) =>
+          record &&
+          record.path === "Artificer" &&
+          /^Permanency\b/i.test(getSkillTemplateName(record))
+      );
+      return { ok, label: "Permanency" };
+    }
+
+    const ok = (skillList || []).some((record) => {
+      if (!record) return false;
+      if (/\[Any\]/i.test(req)) return matchesAnyTemplate(record, req);
+      return (
+        normalizeSkillName(getSkillTemplateName(record)) ===
+          normalizeSkillName(req) ||
+        normalizeSkillName(record.name) === normalizeSkillName(req)
+      );
+    });
+
+    return { ok, label: req };
   }
 
   if (parsed.type === "AND") {
-    const missing = (parsed.skills || []).filter((req) => !hasSkill(req));
+    const results = (parsed.skills || []).map(evaluateRequirement);
+    const missing = results.filter((result) => !result.ok);
     if (missing.length) {
       return {
         ok: false,
         message:
           "This skill requires ALL of the following:\n" +
-          missing.join("\n")
+          missing.map((result) => result.label).join("\n")
       };
     }
     return { ok: true };
   }
 
-  // OR of AND groups
   const groups = parsed.groups || [];
   if (!groups.length) return { ok: true };
 
-  const groupSatisfied = groups.some((group) => {
-    const reqs = group || [];
-    if (!reqs.length) return false;
-    return reqs.every((req) => hasSkill(req));
-  });
+  const evaluatedGroups = groups.map((group) =>
+    (group || []).map(evaluateRequirement)
+  );
+  const groupSatisfied = evaluatedGroups.some(
+    (group) => group.length && group.every((result) => result.ok)
+  );
 
-  if (groupSatisfied) {
-    return { ok: true };
-  }
+  if (groupSatisfied) return { ok: true };
 
-  // Build a helpful message showing acceptable options
-  const groupLabels = groups.map((group) => (group || []).join(" AND "));
+  const groupLabels = evaluatedGroups.map((group) =>
+    group.map((result) => result.label).join(" AND ")
+  );
   return {
     ok: false,
     message:
@@ -579,7 +862,6 @@ function checkPrerequisitesForSkill(skill) {
       groupLabels.map((g) => "• " + g).join("\n")
   };
 }
-
 
 // ---------- SKILLS LOADING ----------
 function buildSkillsStructures(rows) {
@@ -893,7 +1175,8 @@ function showSkillDetail(selectedRecord) {
 
   const { path, name } = recordToUse;
   const list = skillsByPath[path] || [];
-  const skill = list.find((s) => s.name === name);
+  const lookupName = getSkillTemplateName(recordToUse);
+  const skill = list.find((s) => s.name === lookupName);
   if (!skill) {
     alert("No detailed information found for this skill.");
     return;
@@ -901,7 +1184,8 @@ function showSkillDetail(selectedRecord) {
 
   const usesInfo = computeSkillUses(skill);
 
-  const titleText = fullSharpMindName || skill.name || "Skill";
+  const titleText =
+    fullSharpMindName || selectedRecord.name || skill.name || "Skill";
   skillModalTitle.textContent = titleText;
 
   let html = "";
@@ -957,14 +1241,6 @@ function addSelectedSkill() {
     return;
   }
 
-  const already = selectedSkills.find(
-    (sk) => sk.name === name && sk.path === path
-  );
-  if (already) {
-    alert("That skill is already in your list.");
-    return;
-  }
-
   const currentTier = getCurrentTier();
   const isMainPathSkill = path === mainPath;
   const isExplicitProfession = PROFESSION_NAMES.has(path);
@@ -1003,26 +1279,26 @@ function addSelectedSkill() {
       }
     }
 
-    // --- Artificer-specific "Appraise" rules ---
+    // --- Artificer-specific Attune rules ---
     if (path === "Artificer") {
-      const isAppraise = /^Appraise\b/i.test(skill.name);
+      const isAttune = /^Attune\b/i.test(skill.name);
 
       const hasAnyArtificer = selectedSkills.some(
         (sk) => sk.path === "Artificer"
       );
 
-      // 1) First Artificer skill must be an Appraise
-      if (!hasAnyArtificer && !isAppraise) {
+      // 1) First Artificer skill must be an Attune
+      if (!hasAnyArtificer && !isAttune) {
         alert(
-          "Your first Artificer skill must be an Appraise (e.g., 'Appraise Armor'). Take one Appraise before any other Artificer skills."
+          "Your first Artificer skill must be an Attune. Choose one Attune expertise before taking other Artificer skills."
         );
         return;
       }
 
-      // 2) You can only have a number of Appraise skills equal to your Artificer tier
-      if (isAppraise) {
-        const existingAppraises = selectedSkills.filter(
-          (sk) => sk.path === "Artificer" && /^Appraise\b/i.test(sk.name)
+      // 2) You can only have a number of Attune skills equal to your Artificer tier
+      if (isAttune) {
+        const existingAttunes = selectedSkills.filter(
+          (sk) => sk.path === "Artificer" && /^Attune\b/i.test(getSkillTemplateName(sk))
         ).length;
 
         const map = window.pathTierMap || {};
@@ -1034,11 +1310,26 @@ function addSelectedSkill() {
           skill.tier || 0
         );
 
-        if (existingAppraises >= newArtificerTier) {
+        if (existingAttunes >= newArtificerTier) {
           alert(
-            `You can only have a number of Appraise skills equal to your Artificer tier.\n\n` +
+            `You can only have a number of Attune skills equal to your Artificer tier.\n\n` +
               `Current Artificer tier (including this purchase): ${newArtificerTier}\n` +
-              `Existing Appraise skills: ${existingAppraises}`
+              `Existing Attune skills: ${existingAttunes}`
+          );
+          return;
+        }
+      }
+
+      // An Artificer may choose only one Masterwork skill.
+      if (/^Masterwork:/i.test(skill.name)) {
+        const existingMasterwork = selectedSkills.find(
+          (sk) =>
+            sk.path === "Artificer" &&
+            /^Masterwork:/i.test(getSkillTemplateName(sk))
+        );
+        if (existingMasterwork) {
+          alert(
+            `You may only choose one Masterwork skill. You already have ${existingMasterwork.name}.`
           );
           return;
         }
@@ -1126,12 +1417,47 @@ if (isSecondaryPathSkill) {
   const isSharpMindSkill =
     path === "Scholar" && /^Sharp Mind\b/i.test(skill.name);
 
+  let displayName = name;
+  let anyValue = null;
+  const hasAnyPlaceholder = /\[Any\]/i.test(name);
+
+  if (hasAnyPlaceholder) {
+    const entered = prompt(
+      `Enter what should replace [Any] for ${name}:`,
+      ""
+    );
+    if (entered === null) return;
+
+    anyValue = entered.trim();
+    if (anyValue.startsWith("[") && anyValue.endsWith("]")) {
+      anyValue = anyValue.slice(1, -1).trim();
+    }
+    if (!anyValue) {
+      alert("Please enter a value for [Any]. The skill was not added.");
+      return;
+    }
+
+    displayName = name.replace(/\[Any\]/gi, `[${anyValue}]`);
+  }
+
+  const already = selectedSkills.find(
+    (sk) => sk.path === path && normalizeSkillName(sk.name) === normalizeSkillName(displayName)
+  );
+  if (already) {
+    alert("That skill is already in your list.");
+    return;
+  }
+
   const candidateRecord = {
-    name,
+    name: displayName,
     path,
     tier: skill.tier,
     free
   };
+  if (hasAnyPlaceholder) {
+    candidateRecord.baseName = name;
+    candidateRecord.anyValue = anyValue;
+  }
   const candidateCost = computeSkillCost(candidateRecord);
 
   if (candidateCost > available) {
@@ -1182,27 +1508,33 @@ function renderSelectedSkills() {
 
       const skillToRemove = selectedSkills[originalIndex];
 
-      // Extra Appraise safety: don't allow removing the last Appraise
+      // Extra Attune safety: do not allow removing the last Attune
       // if there are other Artificer skills left.
       if (
         skillToRemove.path === "Artificer" &&
-        /^Appraise\b/i.test(skillToRemove.name)
+        /^Attune\b/i.test(getSkillTemplateName(skillToRemove))
       ) {
-        const remainingAppraises = selectedSkills.filter((s, idx) => {
+        const remainingAttunes = selectedSkills.filter((s, idx) => {
           if (idx === originalIndex) return false;
-          return s.path === "Artificer" && /^Appraise\b/i.test(s.name);
+          return (
+            s.path === "Artificer" &&
+            /^Attune\b/i.test(getSkillTemplateName(s))
+          );
         }).length;
 
-        const remainingNonAppraiseArtificer = selectedSkills.filter(
+        const remainingNonAttuneArtificer = selectedSkills.filter(
           (s, idx) => {
             if (idx === originalIndex) return false;
-            return s.path === "Artificer" && !/^Appraise\b/i.test(s.name);
+            return (
+              s.path === "Artificer" &&
+              !/^Attune\b/i.test(getSkillTemplateName(s))
+            );
           }
         ).length;
 
-        if (remainingAppraises === 0 && remainingNonAppraiseArtificer > 0) {
+        if (remainingAttunes === 0 && remainingNonAttuneArtificer > 0) {
           alert(
-            "You must have at least one Appraise skill if you have other Artificer skills."
+            "You must have at least one Attune skill if you have other Artificer skills."
           );
           return;
         }
@@ -1282,7 +1614,9 @@ function renderSelectedSkills() {
 
     let usesDisplay = "—";
     const metaSkillList = skillsByPath[sk.path] || [];
-    const metaSkill = metaSkillList.find((s) => s.name === sk.name);
+    const metaSkill = metaSkillList.find(
+      (s) => s.name === getSkillTemplateName(sk)
+    );
     if (metaSkill) {
       const usesInfo = computeSkillUses(metaSkill);
       if (usesInfo) {
@@ -1582,7 +1916,7 @@ function collectCharacterState() {
   );
 
   return {
-    version: 16,
+    version: 17,
     characterName: characterNameInput.value || "",
     playerName: playerNameInput.value || "",
     pathDisplay: pathDisplaySelect.value || "",

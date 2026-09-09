@@ -1,22 +1,5 @@
-// ---------- PARCHMENT & TITLE IMAGES FOR PDF ----------
-let parchmentImg = null;
+// ---------- TITLE IMAGE FOR PDF ----------
 let titleImg = null;
-
-// preload parchment.jpg
-(function preloadParchment() {
-  const img = new Image();
-  img.crossOrigin = "anonymous";
-  img.src = "parchment.jpg";
-
-  img.onload = function () {
-    const canvas = document.createElement("canvas");
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0);
-    parchmentImg = canvas.toDataURL("image/jpeg");
-  };
-})();
 
 // preload la_title.png
 (function preloadTitle() {
@@ -34,11 +17,10 @@ let titleImg = null;
   };
 })();
 
-function drawParchmentBackground(doc) {
+function drawWhiteBackground(doc) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-
-  doc.setFillColor(255, 255, 255); // White
+  doc.setFillColor(255, 255, 255);
   doc.rect(0, 0, pageWidth, pageHeight, "F");
 }
 
@@ -51,7 +33,8 @@ function getUsesDisplayForSkill(sk) {
     return "—";
   }
   const metaSkillList = skillsByPath[sk.path] || [];
-  const metaSkill = metaSkillList.find((s) => s.name === sk.name);
+  const lookupName = sk.baseName || sk.name;
+  const metaSkill = metaSkillList.find((s) => s.name === lookupName);
   if (!metaSkill) return "—";
 
   const usesInfo = computeSkillUses(metaSkill);
@@ -91,7 +74,7 @@ function exportCharacterPDF() {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
 
-  drawParchmentBackground(doc);
+  drawWhiteBackground(doc);
 
   const margin = 40;
   let y = margin;
@@ -413,8 +396,8 @@ function exportCharacterPDF() {
 
   if (!fullSkillInfo) {
     // Table header background
-    doc.setFillColor(0, 0, 0);
-    doc.setDrawColor(0, 0, 0);
+    doc.setFillColor(60, 40, 20);
+    doc.setDrawColor(60, 40, 20);
     doc.rect(margin, y, tableWidth, headerHeight, "F");
 
     doc.setFont("Times", "bold");
@@ -516,7 +499,7 @@ function exportCharacterPDF() {
       const bottomMargin = 60;
       if (y > pageHeight - margin - bottomMargin) {
         doc.addPage();
-        drawParchmentBackground(doc);
+        drawWhiteBackground(doc);
 
         y = margin;
 
@@ -526,8 +509,8 @@ function exportCharacterPDF() {
         doc.text("Skills (continued)", margin, y);
         y += 10;
 
-        doc.setFillColor(0, 0, 0);
-        doc.setDrawColor(0, 0, 0);
+        doc.setFillColor(60, 40, 20);
+        doc.setDrawColor(60, 40, 20);
         doc.rect(margin, y, tableWidth, headerHeight, "F");
 
         doc.setFont("Times", "bold");
@@ -592,7 +575,8 @@ function exportCharacterPDF() {
       let metaSkill = null;
       if (typeof skillsByPath !== "undefined") {
         const metaSkillList = skillsByPath[sk.path] || [];
-        metaSkill = metaSkillList.find((s) => s.name === sk.name) || null;
+        const lookupName = sk.baseName || sk.name;
+        metaSkill = metaSkillList.find((s) => s.name === lookupName) || null;
       }
 
       // compute how tall this card needs to be
@@ -601,7 +585,7 @@ function exportCharacterPDF() {
       // if not enough room on this page, go to next page first
       if (cardCurrentY + neededHeight > pageHeight - margin) {
         doc.addPage();
-        drawParchmentBackground(doc);
+        drawWhiteBackground(doc);
 
         let newY = margin;
         doc.setFont("Times", "bold");
@@ -719,7 +703,7 @@ function exportCharacterPDF() {
   // ---------- EVENT SUMMARY (optional) ----------
   if (includeEvents) {
     doc.addPage();
-    drawParchmentBackground(doc);
+    drawWhiteBackground(doc);
 
     y = margin;
 
@@ -733,8 +717,8 @@ function exportCharacterPDF() {
     const eventHeaderHeight = 30;
 
     // header bar
-    doc.setFillColor(0, 0, 0);
-    doc.setDrawColor(0, 0, 0);
+    doc.setFillColor(60, 40, 20);
+    doc.setDrawColor(60, 40, 20);
     doc.rect(margin, y, eventTableWidth, eventHeaderHeight, "F");
 
     doc.setFont("Times", "bold");
@@ -782,7 +766,7 @@ function exportCharacterPDF() {
       events.forEach((ev) => {
         if (y > pageHeight - margin - 40) {
           doc.addPage();
-          drawParchmentBackground(doc);
+          drawWhiteBackground(doc);
 
           y = margin + 10;
           doc.setFont("Times", "bold");
@@ -790,8 +774,8 @@ function exportCharacterPDF() {
           doc.text("Event Summary (continued)", margin, y);
           y += 10;
 
-          doc.setFillColor(0, 0, 0);
-          doc.setDrawColor(0, 0, 0);
+          doc.setFillColor(60, 40, 20);
+          doc.setDrawColor(60, 40, 20);
           doc.rect(margin, y, eventTableWidth, eventHeaderHeight, "F");
 
           doc.setFont("Times", "bold");
