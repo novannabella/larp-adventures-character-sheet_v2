@@ -512,6 +512,15 @@ const ARTIFICER_EXPERTISES = new Set([
   "wondrous items"
 ]);
 
+const ARTIFICER_WILDCARD_ANY_SKILLS = new Set([
+  "inner workings [any]",
+  "critical lens [any]"
+]);
+
+function isArtificerWildcardAnySkillName(name) {
+  return ARTIFICER_WILDCARD_ANY_SKILLS.has(normalizeSkillName(name));
+}
+
 function normalizeExpertiseName(value) {
   let norm = normalizeSkillName(value)
     .replace(/^\[|\]$/g, "")
@@ -534,12 +543,21 @@ function getBracketValues(name) {
   return values;
 }
 
-function getArtificerExpertisesForSkill(record) {
+function getArtificerExpertisesForSkill(record, skillList = selectedSkills) {
   if (!record || record.path !== "Artificer") return [];
 
-  // For [Any] skills, the replacement text is an object/skill name, not an
-  // expertise category, so use the original template and do not count [Any].
   const templateName = getSkillTemplateName(record);
+
+  // Inner Workings [Any] and Critical Lens [Any] are true wildcard expertise
+  // skills. They apply to every Attune expertise the Artificer currently owns,
+  // and automatically expand when additional Attune skills are added later.
+  if (isArtificerWildcardAnySkillName(templateName)) {
+    return Array.from(getOwnedAttuneExpertises(skillList));
+  }
+
+  // Other [Any] skills use the placeholder for a player-entered object/skill
+  // name, not an expertise category, so they do not count toward expertise
+  // totals merely because they contain [Any].
   if (/\[Any\]/i.test(templateName)) return [];
 
   return Array.from(
@@ -557,7 +575,7 @@ function getOwnedAttuneExpertises(skillList = selectedSkills) {
     if (!record || record.path !== "Artificer") return;
     const templateName = getSkillTemplateName(record);
     if (!/^Attune\b/i.test(templateName)) return;
-    getArtificerExpertisesForSkill(record).forEach((e) => result.add(e));
+    getArtificerExpertisesForSkill(record, skillList).forEach((e) => result.add(e));
   });
   return result;
 }
@@ -568,7 +586,7 @@ function countArtificerSkillsWithExpertise(expertise, skillList = selectedSkills
     (record) =>
       record &&
       record.path === "Artificer" &&
-      getArtificerExpertisesForSkill(record).includes(target)
+      getArtificerExpertisesForSkill(record, skillList).includes(target)
   ).length;
 }
 
@@ -1420,8 +1438,10 @@ if (isSecondaryPathSkill) {
   let displayName = name;
   let anyValue = null;
   const hasAnyPlaceholder = /\[Any\]/i.test(name);
+  const shouldCustomizeAny =
+    hasAnyPlaceholder && !isArtificerWildcardAnySkillName(name);
 
-  if (hasAnyPlaceholder) {
+  if (shouldCustomizeAny) {
     const entered = prompt(
       `Enter what should replace [Any] for ${name}:`,
       ""
@@ -1454,7 +1474,7 @@ if (isSecondaryPathSkill) {
     tier: skill.tier,
     free
   };
-  if (hasAnyPlaceholder) {
+  if (shouldCustomizeAny) {
     candidateRecord.baseName = name;
     candidateRecord.anyValue = anyValue;
   }
