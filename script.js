@@ -237,6 +237,17 @@ function getMilestonesForPath(path) {
   return milestones;
 }
 
+function getSharpMindUseBonus(skill) {
+  if (!skill || !skill.path || !skill.name) return 0;
+
+  return (sharpMindAssignments || []).filter(
+    (assignment) =>
+      assignment &&
+      assignment.targetPath === skill.path &&
+      normalizeSkillName(assignment.targetName) === normalizeSkillName(skill.name)
+  ).length;
+}
+
 // Uses depend on the tier of the specific path/profession
 function computeSkillUses(skill) {
   if (!skill) return null;
@@ -293,7 +304,7 @@ try {
 
     if (perMilestone1 && perMilestone2) {
       const perMilestoneBase = base || 1;
-      const total = perMilestoneBase * milestones;
+      const total = perMilestoneBase * milestones + getSharpMindUseBonus(skill);
       return {
         display: `${total} × ${label}`,
         numeric: total,
@@ -304,7 +315,10 @@ try {
     if (!perMilestone1 && perMilestone2) {
       const baseUses = base || 1;
       const hasSecondOrMore = milestones > 1;
-      const total = baseUses + (hasSecondOrMore ? 1 : 0);
+      const total =
+        baseUses +
+        (hasSecondOrMore ? 1 : 0) +
+        getSharpMindUseBonus(skill);
       return {
         display: `${total} × ${label}`,
         numeric: total,
@@ -314,7 +328,7 @@ try {
 
     if (perMilestone1 && !perMilestone2) {
       const perMilestoneBase = base || 1;
-      const total = perMilestoneBase * milestones;
+      const total = perMilestoneBase * milestones + getSharpMindUseBonus(skill);
       return {
         display: `${total} × ${label}`,
         numeric: total,
@@ -333,6 +347,7 @@ try {
 
   if (Number.isFinite(total) && total > 0) {
     total = Math.floor(total + 1e-6);
+    total += getSharpMindUseBonus(skill);
   } else {
     total = 0;
   }
