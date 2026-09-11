@@ -481,6 +481,7 @@ function exportCharacterPDF() {
       current += measureBlock(metaSkill.special);
       current += measureBlock(metaSkill.limitations);
       current += measureBlock(metaSkill.phys);
+      current += measureBlock(metaSkill.requirements);
       current += measureBlock(metaSkill.prereq);
     }
 
@@ -680,6 +681,7 @@ function exportCharacterPDF() {
         addLabeledBlock("Special", metaSkill.special);
         addLabeledBlock("Limitations", metaSkill.limitations);
         addLabeledBlock("Phys Rep", metaSkill.phys);
+        addLabeledBlock("Requirements", metaSkill.requirements);
         addLabeledBlock("Prerequisite", metaSkill.prereq);
       }
 
