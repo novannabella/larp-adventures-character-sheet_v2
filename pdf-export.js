@@ -483,6 +483,11 @@ function exportCharacterPDF() {
       current += measureBlock(metaSkill.phys);
       current += measureBlock(metaSkill.requirements);
       current += measureBlock(metaSkill.prereq);
+      const craftabilityText =
+        typeof getCraftabilityText === "function"
+          ? getCraftabilityText(metaSkill)
+          : "";
+      current += measureBlock(craftabilityText);
     }
 
     const usesDisplay = getUsesDisplayForSkill(sk);
@@ -683,6 +688,17 @@ function exportCharacterPDF() {
         addLabeledBlock("Phys Rep", metaSkill.phys);
         addLabeledBlock("Requirements", metaSkill.requirements);
         addLabeledBlock("Prerequisite", metaSkill.prereq);
+
+        const craftabilityText =
+          typeof getCraftabilityText === "function"
+            ? getCraftabilityText(metaSkill)
+            : "";
+        if (craftabilityText) {
+          addLabeledBlock(
+            "Crafting",
+            craftabilityText.replace(/^Can be made as:\s*/i, "")
+          );
+        }
       }
 
       // # of uses (label bold via addLabeledBlock)

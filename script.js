@@ -959,6 +959,134 @@ function checkPrerequisitesForSkill(skill, skillList = selectedSkills) {
   };
 }
 
+
+function getCraftabilityText(skill) {
+  if (!skill) return "";
+  const types = [];
+  if (skill.scrolls) types.push("Scroll");
+  if (skill.potions) types.push("Potion");
+  return types.length ? `Can be made as: ${types.join(", ")}` : "";
+}
+
+function getAlchemicalConcoctionSpellTierCap(skillName) {
+  const name = String(skillName || "");
+  if (/^Alchemical Concoction 2\b/i.test(name)) return 5;
+  if (/^Alchemical Concoction 3\b/i.test(name)) return 6;
+  return 0;
+}
+
+function getEligiblePotionSpellTargets(maxTier) {
+  const results = [];
+
+  (selectedSkills || []).forEach((record) => {
+    if (!record || !record.path || !record.name) return;
+
+    const templateName = getSkillTemplateName(record);
+    const metaSkill = (skillsByPath[record.path] || []).find(
+      (s) => s.name === templateName
+    );
+    if (!metaSkill || !metaSkill.potions) return;
+
+    const tier = parseInt(metaSkill.tier || record.tier || 0, 10) || 0;
+    if (maxTier > 0 && tier > maxTier) return;
+
+    results.push({
+      path: record.path,
+      name: record.name,
+      baseName: templateName,
+      tier
+    });
+  });
+
+  return results.sort((a, b) => {
+    const tierDiff = a.tier - b.tier;
+    if (tierDiff !== 0) return tierDiff;
+    const pathDiff = a.path.localeCompare(b.path, undefined, { sensitivity: "base" });
+    if (pathDiff !== 0) return pathDiff;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
+}
+
+async function choosePotionSpellTarget(concoctionSkill) {
+  const tierCap = getAlchemicalConcoctionSpellTierCap(concoctionSkill.name);
+  const eligible = getEligiblePotionSpellTargets(tierCap);
+
+  if (!eligible.length) {
+    alert(
+      `You do not currently have any Potion-eligible skills at Tier ${tierCap} or lower to use with ${concoctionSkill.name}.`
+    );
+    return null;
+  }
+
+  return await new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.style.maxWidth = "560px";
+    dialog.style.width = "calc(100% - 40px)";
+    dialog.style.padding = "20px";
+
+    const title = document.createElement("h3");
+    title.textContent = "Choose Potion Spell";
+    title.style.marginTop = "0";
+
+    const help = document.createElement("p");
+    help.textContent =
+      `Choose one of your known Potion-eligible skills at Tier ${tierCap} or lower.`;
+
+    const select = document.createElement("select");
+    select.style.width = "100%";
+    select.style.marginBottom = "18px";
+
+    eligible.forEach((target, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = `Tier ${target.tier}: ${target.name} (${target.path})`;
+      select.appendChild(option);
+    });
+
+    const buttons = document.createElement("div");
+    buttons.style.display = "flex";
+    buttons.style.justifyContent = "flex-end";
+    buttons.style.gap = "10px";
+
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "Cancel";
+
+    const apply = document.createElement("button");
+    apply.type = "button";
+    apply.textContent = "Apply";
+
+    cancel.addEventListener("click", () => {
+      dialog.close();
+      dialog.remove();
+      resolve(null);
+    });
+
+    apply.addEventListener("click", () => {
+      const target = eligible[parseInt(select.value, 10) || 0] || null;
+      dialog.close();
+      dialog.remove();
+      resolve(target);
+    });
+
+    dialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      dialog.close();
+      dialog.remove();
+      resolve(null);
+    }, { once: true });
+
+    buttons.appendChild(cancel);
+    buttons.appendChild(apply);
+    dialog.appendChild(title);
+    dialog.appendChild(help);
+    dialog.appendChild(select);
+    dialog.appendChild(buttons);
+    document.body.appendChild(dialog);
+    dialog.showModal();
+  });
+}
+
 // ---------- SKILLS LOADING ----------
 function buildSkillsStructures(rows) {
   skillsData = [];
@@ -981,6 +1109,8 @@ function buildSkillsStructures(rows) {
       phys: r["Phys Rep"] || "",
       requirements: r["Requirements"] || "",
       prereq: r["Prerequisite"] || "",
+      scrolls: (r["Scrolls"] || "").trim().toUpperCase() === "Y",
+      potions: (r["Potions"] || "").trim().toUpperCase() === "Y",
       usesBasePerDay: r["Uses Base Per Day"]
         ? parseFloat(r["Uses Base Per Day"]) || 0
         : 0,
@@ -1034,12 +1164,20 @@ function populateSkillSelect() {
 
   const usedKeys = new Set(
     selectedSkills.map((sk) => {
+      const canonicalName = getSkillTemplateName(sk);
+      const isRepeatableConcoction =
+        sk.path === "Artificer" &&
+        /^Alchemical Concoction [23]\b/i.test(canonicalName) &&
+        /\[Spell\]/i.test(canonicalName);
+
+      if (isRepeatableConcoction) return null;
+
       const templateName =
-        sk.path === "Scholar" && /^Sharp Mind\b/i.test(getSkillTemplateName(sk))
-          ? getSkillTemplateName(sk)
+        sk.path === "Scholar" && /^Sharp Mind\b/i.test(canonicalName)
+          ? canonicalName
           : sk.name;
       return `${sk.path}::${templateName}`;
-    })
+    }).filter(Boolean)
   );
 
   skills.forEach((s) => {
@@ -1072,6 +1210,9 @@ function updateSkillDescriptionFromSelect() {
   if (skill.phys) desc += `\n\nPhys Rep: ${skill.phys}`;
   if (skill.requirements) desc += `\n\nRequirements: ${skill.requirements}`;
   if (skill.prereq) desc += `\n\nPrerequisite: ${skill.prereq}`;
+
+  const craftabilityText = getCraftabilityText(skill);
+  if (craftabilityText) desc += `\n\n${craftabilityText}`;
 
   const usesInfo = computeSkillUses(skill);
   if (usesInfo && usesInfo.display) {
@@ -1289,6 +1430,11 @@ function showSkillDetail(selectedRecord) {
   html += formatMultiLineBlock("Phys Rep", skill.phys);
   html += formatMultiLineBlock("Requirements", skill.requirements);
   html += formatMultiLineBlock("Prerequisite", skill.prereq);
+
+  const craftabilityText = getCraftabilityText(skill);
+  if (craftabilityText) {
+    html += `<p><strong>Crafting:</strong> ${escapeHtml(craftabilityText.replace(/^Can be made as:\s*/i, ""))}</p>`;
+  }
 
   if (usesInfo && usesInfo.display) {
     html += `<p><strong>Uses:</strong> ${escapeHtml(usesInfo.display)}</p>`;
@@ -1531,6 +1677,22 @@ if (isSecondaryPathSkill) {
     displayName = name.replace(/\[Any\]/gi, `[${anyValue}]`);
   }
 
+  const hasSpellPlaceholder =
+    path === "Artificer" &&
+    /^Alchemical Concoction [23]\b/i.test(name) &&
+    /\[Spell\]/i.test(name);
+
+  let potionSpellTarget = null;
+  if (hasSpellPlaceholder) {
+    potionSpellTarget = await choosePotionSpellTarget(skill);
+    if (!potionSpellTarget) return;
+
+    displayName = displayName.replace(
+      /\[Spell\]/gi,
+      `[${potionSpellTarget.name}]`
+    );
+  }
+
   let sharpMindTarget = null;
   if (isSharpMindSkill) {
     const effectiveScholarTier = Math.max(
@@ -1565,6 +1727,15 @@ if (isSecondaryPathSkill) {
   if (shouldCustomizeAny) {
     candidateRecord.baseName = name;
     candidateRecord.anyValue = anyValue;
+  }
+  if (hasSpellPlaceholder && potionSpellTarget) {
+    candidateRecord.baseName = name;
+    candidateRecord.potionSpellTarget = {
+      path: potionSpellTarget.path,
+      name: potionSpellTarget.name,
+      baseName: potionSpellTarget.baseName,
+      tier: potionSpellTarget.tier
+    };
   }
   if (isSharpMindSkill && sharpMindTarget) {
     candidateRecord.baseName = name;
