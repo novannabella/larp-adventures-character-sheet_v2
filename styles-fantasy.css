@@ -656,3 +656,18 @@ tbody tr:hover {
   font-size: 11px;
   color: var(--ink);
 }
+
+/* ===== Event list grouped by year ===== */
+.events-table .event-year-row { cursor: pointer; user-select: none; }
+.events-table .event-year-row:focus { outline: none; }
+.events-table .event-year-row:hover .event-year-cell,
+.events-table .event-year-row:focus .event-year-cell { background: rgba(255, 255, 255, 0.08); }
+.events-table .event-year-cell {
+  padding: 8px 10px; font-weight: 700; text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+.event-year-arrow { display: inline-block; width: 18px; font-size: 11px; }
+.event-year-title { margin-right: 6px; }
+.event-year-summary { font-weight: 400; color: var(--muted); font-size: 0.9em; }

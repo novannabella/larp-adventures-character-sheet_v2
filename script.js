@@ -1989,6 +1989,23 @@ function addEventFromInputs() {
   recomputeTotals();
 }
 
+const eventYearExpanded = {};
+
+function getEventYearKey(ev) {
+  const date = String((ev && ev.date) || "").trim();
+  const match = date.match(/^(\d{4})-/);
+  return match ? match[1] : "Undated";
+}
+
+function isEventYearExpanded(yearKey) {
+  if (Object.prototype.hasOwnProperty.call(eventYearExpanded, yearKey)) {
+    return eventYearExpanded[yearKey];
+  }
+
+  const currentYear = String(new Date().getFullYear());
+  return yearKey === currentYear;
+}
+
 function renderEvents() {
   eventsBody.innerHTML = "";
 
@@ -2003,87 +2020,152 @@ function renderEvents() {
     "Skill Pts"
   ];
 
+  const eventsByYear = new Map();
   eventsData.forEach((ev) => {
-    const tr = document.createElement("tr");
+    const yearKey = getEventYearKey(ev);
+    if (!eventsByYear.has(yearKey)) eventsByYear.set(yearKey, []);
+    eventsByYear.get(yearKey).push(ev);
+  });
 
-    const tdButtons = document.createElement("td");
-    tdButtons.dataset.label = labels[0];
+  const yearKeys = Array.from(eventsByYear.keys()).sort((a, b) => {
+    if (a === "Undated") return 1;
+    if (b === "Undated") return -1;
+    return Number(b) - Number(a);
+  });
 
-    const minusBtn = document.createElement("button");
-    minusBtn.textContent = "−";
-    minusBtn.className = "button small secondary";
-    minusBtn.title = "Remove event";
-    minusBtn.style.minWidth = "28px";
-    minusBtn.addEventListener("click", () => {
-      if (confirm("Are you sure you want to remove this event?")) {
-        const idx = eventsData.indexOf(ev);
-        if (idx !== -1) {
-          eventsData.splice(idx, 1);
-          markDirty();
-          if (editingEventIndex === idx) {
-            editingEventIndex = null;
-            addEventBtn.textContent = "Add Event";
+  yearKeys.forEach((yearKey) => {
+    const yearEvents = eventsByYear.get(yearKey) || [];
+    const expanded = isEventYearExpanded(yearKey);
+
+    const yearRow = document.createElement("tr");
+    yearRow.className = "event-year-row";
+    yearRow.tabIndex = 0;
+    yearRow.setAttribute("role", "button");
+    yearRow.setAttribute("aria-expanded", expanded ? "true" : "false");
+
+    const yearCell = document.createElement("td");
+    yearCell.colSpan = labels.length;
+    yearCell.className = "event-year-cell";
+    yearCell.dataset.label = "";
+
+    const arrow = document.createElement("span");
+    arrow.className = "event-year-arrow";
+    arrow.textContent = expanded ? "▼" : "▶";
+    arrow.setAttribute("aria-hidden", "true");
+
+    const title = document.createElement("span");
+    title.className = "event-year-title";
+    title.textContent = yearKey;
+
+    const summary = document.createElement("span");
+    summary.className = "event-year-summary";
+    summary.textContent = `(${yearEvents.length} ${yearEvents.length === 1 ? "event" : "events"})`;
+
+    yearCell.appendChild(arrow);
+    yearCell.appendChild(title);
+    yearCell.appendChild(summary);
+    yearRow.appendChild(yearCell);
+
+    const toggleYear = () => {
+      eventYearExpanded[yearKey] = !isEventYearExpanded(yearKey);
+      renderEvents();
+    };
+
+    yearRow.addEventListener("click", toggleYear);
+    yearRow.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggleYear();
+      }
+    });
+
+    eventsBody.appendChild(yearRow);
+
+    if (!expanded) return;
+
+    yearEvents.forEach((ev) => {
+      const tr = document.createElement("tr");
+      tr.className = "event-data-row";
+
+      const tdButtons = document.createElement("td");
+      tdButtons.dataset.label = labels[0];
+
+      const minusBtn = document.createElement("button");
+      minusBtn.textContent = "−";
+      minusBtn.className = "button small secondary";
+      minusBtn.title = "Remove event";
+      minusBtn.style.minWidth = "28px";
+      minusBtn.addEventListener("click", () => {
+        if (confirm("Are you sure you want to remove this event?")) {
+          const idx = eventsData.indexOf(ev);
+          if (idx !== -1) {
+            eventsData.splice(idx, 1);
+            markDirty();
+            if (editingEventIndex === idx) {
+              editingEventIndex = null;
+              addEventBtn.textContent = "Add Event";
+            }
+            recomputeTotals();
           }
-          recomputeTotals();
         }
+      });
+
+      const editBtn = document.createElement("button");
+      editBtn.textContent = "Edit";
+      editBtn.className = "button small secondary";
+      editBtn.style.minWidth = "40px";
+      editBtn.style.marginLeft = "4px";
+      editBtn.title = "Edit event";
+      editBtn.addEventListener("click", () => {
+        const idx = eventsData.indexOf(ev);
+        if (idx === -1) return;
+        editingEventIndex = idx;
+
+        eventNameInput.value = ev.name || "";
+        eventDateInput.value = ev.date || "";
+        eventTypeSelect.value = ev.type || "";
+        eventNpcInput.checked = !!ev.npc;
+        eventMotInput.checked = !!ev.merchantOT;
+        eventBonusInput.value =
+          ev.bonusSP != null && ev.bonusSP !== "" ? String(ev.bonusSP) : "0";
+
+        addEventBtn.textContent = "Update Event";
+
+        try {
+          eventNameInput.scrollIntoView({
+            behavior: "smooth",
+            block: "center"
+          });
+        } catch (e) {
+          eventNameInput.scrollIntoView();
+        }
+        eventNameInput.focus();
+      });
+
+      tdButtons.appendChild(minusBtn);
+      tdButtons.appendChild(editBtn);
+      tr.appendChild(tdButtons);
+
+      function addCell(text, labelIndex) {
+        const td = document.createElement("td");
+        td.textContent = text;
+        td.dataset.label = labels[labelIndex] || "";
+        tr.appendChild(td);
       }
+
+      addCell(ev.name || "", 1);
+      addCell(formatDateDisplay(ev.date || ""), 2);
+      addCell(ev.type || "", 3);
+      addCell(ev.npc ? "Yes" : "", 4);
+      addCell(ev.merchantOT ? "Yes" : "", 5);
+      addCell(
+        ev.bonusSP != null && ev.bonusSP !== "" ? String(ev.bonusSP) : "",
+        6
+      );
+      addCell(ev.skillPoints != null ? String(ev.skillPoints) : "0", 7);
+
+      eventsBody.appendChild(tr);
     });
-
-    const editBtn = document.createElement("button");
-    editBtn.textContent = "Edit";
-    editBtn.className = "button small secondary";
-    editBtn.style.minWidth = "40px";
-    editBtn.style.marginLeft = "4px";
-    editBtn.title = "Edit event";
-    editBtn.addEventListener("click", () => {
-      const idx = eventsData.indexOf(ev);
-      if (idx === -1) return;
-      editingEventIndex = idx;
-
-      eventNameInput.value = ev.name || "";
-      eventDateInput.value = ev.date || "";
-      eventTypeSelect.value = ev.type || "";
-      eventNpcInput.checked = !!ev.npc;
-      eventMotInput.checked = !!ev.merchantOT;
-      eventBonusInput.value =
-        ev.bonusSP != null && ev.bonusSP !== "" ? String(ev.bonusSP) : "0";
-
-      addEventBtn.textContent = "Update Event";
-
-      try {
-        eventNameInput.scrollIntoView({
-          behavior: "smooth",
-          block: "center"
-        });
-      } catch (e) {
-        eventNameInput.scrollIntoView();
-      }
-      eventNameInput.focus();
-    });
-
-    tdButtons.appendChild(minusBtn);
-    tdButtons.appendChild(editBtn);
-    tr.appendChild(tdButtons);
-
-    function addCell(text, labelIndex) {
-      const td = document.createElement("td");
-      td.textContent = text;
-      td.dataset.label = labels[labelIndex] || "";
-      tr.appendChild(td);
-    }
-
-    addCell(ev.name || "", 1);
-    addCell(formatDateDisplay(ev.date || ""), 2);
-    addCell(ev.type || "", 3);
-    addCell(ev.npc ? "Yes" : "", 4);
-    addCell(ev.merchantOT ? "Yes" : "", 5);
-    addCell(
-      ev.bonusSP != null && ev.bonusSP !== "" ? String(ev.bonusSP) : "",
-      6
-    );
-    addCell(ev.skillPoints != null ? String(ev.skillPoints) : "0", 7);
-
-    eventsBody.appendChild(tr);
   });
 }
 
