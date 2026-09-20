@@ -957,14 +957,23 @@ tbody tr:hover {
 }
 
 /* ===== Selected skills grouped by Path/Profession ===== */
-.skills-table .skill-path-group-row { cursor: pointer; user-select: none; }
+.skills-table .skill-path-group-row {
+  display: block;
+  width: 100%;
+  flex: 0 0 100%;
+  cursor: pointer;
+  user-select: none;
+}
 .skills-table .skill-path-group-row:focus { outline: none; }
 .skills-table .skill-path-group-cell {
+  display: block;
+  width: 100%;
   padding: 8px 10px;
   font-weight: 700;
-  text-align: left;
+  text-align: left !important;
   background: rgba(255, 255, 255, 0.04);
 }
 .skill-path-arrow { display: inline-block; width: 18px; font-size: 11px; }
 .skill-path-title { margin-right: 6px; }
 .skill-path-summary { font-weight: 400; color: var(--muted); font-size: 0.9em; }
+.skills-table .skill-path-group-cell::before { content: none !important; }
