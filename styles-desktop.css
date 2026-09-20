@@ -772,3 +772,25 @@ tbody tr:hover {
   color: var(--muted);
   font-size: 0.9em;
 }
+
+/* ===== Selected skills grouped by Path/Profession ===== */
+.skills-table .skill-path-group-row {
+  cursor: pointer;
+  user-select: none;
+}
+.skills-table .skill-path-group-row:hover .skill-path-group-cell,
+.skills-table .skill-path-group-row:focus .skill-path-group-cell {
+  background: rgba(255, 255, 255, 0.08);
+}
+.skills-table .skill-path-group-row:focus { outline: none; }
+.skills-table .skill-path-group-cell {
+  padding: 8px 10px;
+  font-weight: 700;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+.skill-path-arrow { display: inline-block; width: 18px; font-size: 11px; }
+.skill-path-title { margin-right: 6px; }
+.skill-path-summary { font-weight: 400; color: var(--muted); font-size: 0.9em; }

@@ -19,6 +19,10 @@ let skillSortState = {
   direction: "asc" // "asc" | "desc"
 };
 
+// Expanded/collapsed state for Path/Profession grouped skill view.
+// A path not present here uses the default: main path open, all others closed.
+const expandedSkillPaths = new Map();
+
 // Dirty flag for unsaved changes
 let isDirty = false;
 
@@ -1769,7 +1773,7 @@ function renderSelectedSkills() {
 
   const sorted = getSortedSelectedSkills();
 
-  sorted.forEach((sk) => {
+  const appendSkillRow = (sk) => {
     const tr = document.createElement("tr");
 
     const tdMinus = document.createElement("td");
@@ -1930,7 +1934,75 @@ function renderSelectedSkills() {
     tr.appendChild(tdCost);
 
     selectedSkillsBody.appendChild(tr);
-  });
+  };
+
+  if (skillSortState.column === "path") {
+    const mainPath = pathDisplaySelect.value || "";
+    const grouped = new Map();
+
+    sorted.forEach((sk) => {
+      if (!grouped.has(sk.path)) grouped.set(sk.path, []);
+      grouped.get(sk.path).push(sk);
+    });
+
+    grouped.forEach((skills, path) => {
+      const totalCost = skills.reduce(
+        (sum, sk) => sum + computeSkillCost(sk),
+        0
+      );
+      const isExpanded = expandedSkillPaths.has(path)
+        ? expandedSkillPaths.get(path)
+        : path === mainPath;
+
+      const groupRow = document.createElement("tr");
+      groupRow.className = "skill-path-group-row";
+      groupRow.tabIndex = 0;
+      groupRow.setAttribute("role", "button");
+      groupRow.setAttribute("aria-expanded", String(isExpanded));
+
+      const groupCell = document.createElement("td");
+      groupCell.colSpan = 6;
+      groupCell.className = "skill-path-group-cell";
+
+      const arrow = document.createElement("span");
+      arrow.className = "skill-path-arrow";
+      arrow.textContent = isExpanded ? "▼" : "▶";
+
+      const title = document.createElement("span");
+      title.className = "skill-path-title";
+      title.textContent = path;
+
+      const summary = document.createElement("span");
+      summary.className = "skill-path-summary";
+      summary.textContent = `(${skills.length} ${skills.length === 1 ? "skill" : "skills"} / ${totalCost} SP)`;
+
+      groupCell.appendChild(arrow);
+      groupCell.appendChild(title);
+      groupCell.appendChild(summary);
+      groupRow.appendChild(groupCell);
+
+      const toggleGroup = () => {
+        expandedSkillPaths.set(path, !isExpanded);
+        renderSelectedSkills();
+      };
+
+      groupRow.addEventListener("click", toggleGroup);
+      groupRow.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          toggleGroup();
+        }
+      });
+
+      selectedSkillsBody.appendChild(groupRow);
+
+      if (isExpanded) {
+        skills.forEach(appendSkillRow);
+      }
+    });
+  } else {
+    sorted.forEach(appendSkillRow);
+  }
 
   const totalCost = selectedSkills.reduce(
     (sum, sk) => sum + computeSkillCost(sk),
